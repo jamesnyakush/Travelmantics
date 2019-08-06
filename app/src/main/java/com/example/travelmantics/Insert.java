@@ -3,10 +3,12 @@ package com.example.travelmantics;
 import android.content.Intent;
 import android.content.res.Resources;
 import android.net.Uri;
+import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.design.widget.FloatingActionButton;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
@@ -14,7 +16,10 @@ import android.widget.ImageView;
 import android.widget.Toast;
 
 import com.firebase.ui.auth.data.model.Resource;
+import com.google.android.gms.tasks.Continuation;
+import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.OnSuccessListener;
+import com.google.android.gms.tasks.Task;
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.storage.StorageReference;
@@ -44,21 +49,12 @@ public class Insert extends AppCompatActivity {
         databaseReference = FirebaseUtil.databaseReference;
 
 
-
         mTitle = findViewById(R.id.title);
         mDesc = findViewById(R.id.desc);
         mPrice = findViewById(R.id.price);
         imageView = findViewById(R.id.imageDeal);
         mUpload = findViewById(R.id.uploadDeal);
-        mUpload.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
-                intent.setType("image/jpeg");
-                intent.putExtra(Intent.EXTRA_LOCAL_ONLY, true);
-                startActivityForResult(intent.createChooser(intent, "add images"), PICTURE_RESULT);
-            }
-        });
+
 
         findViewById(R.id.save).setOnClickListener(new View.OnClickListener() {
             @Override
@@ -73,11 +69,14 @@ public class Insert extends AppCompatActivity {
         if (deal == null) {
             deal = new TravelDeal();
         }
-        this.deal = deal;
-        showImage(deal.getImageUrl());
+//        this.deal = deal;
+
         mTitle.setText(deal.getTitle());
         mDesc.setText(deal.getDescription());
         mPrice.setText(deal.getPrice());
+        showImage(deal.getImageUrl());
+
+
     }
 
     private void insertDeal() {
@@ -86,7 +85,9 @@ public class Insert extends AppCompatActivity {
         deal.setPrice(mPrice.getText().toString().trim());
 
         if (deal.getId() == null) {
-            databaseReference.push().setValue(deal);        Intent intent = getIntent();
+            databaseReference.push().setValue(deal);
+            Intent intent = getIntent();
+            upload(mUpload);
 
             Toast.makeText(this, "Saved Succesfully", Toast.LENGTH_SHORT).show();
             home();
@@ -96,6 +97,19 @@ public class Insert extends AppCompatActivity {
             home();
         }
 
+    }
+
+    private void upload(Button mUpload) {
+
+        mUpload.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+                intent.setType("image/jpeg");
+                intent.putExtra(Intent.EXTRA_LOCAL_ONLY, true);
+                startActivityForResult(intent.createChooser(intent, "add images"), PICTURE_RESULT);
+            }
+        });
     }
 
     private void deleteDeal() {
@@ -117,26 +131,52 @@ public class Insert extends AppCompatActivity {
         super.onActivityResult(requestCode, resultCode, data);
 
         if (requestCode == PICTURE_RESULT && resultCode == RESULT_OK) {
-            Uri imageUri = data.getData();
-            StorageReference ref = FirebaseUtil.mStorageRef.child(imageUri.getLastPathSegment());
-            ref.putFile(imageUri).addOnSuccessListener(this, new OnSuccessListener<UploadTask.TaskSnapshot>() {
+            assert data != null;
+            final Uri imageUri = data.getData();
+            final StorageReference
+                    reference = FirebaseUtil.mStorageRef.child(imageUri.getLastPathSegment());
+            UploadTask uploadTask = reference.putFile(imageUri);
+            Task<Uri> urlTask = uploadTask.continueWithTask(new Continuation<UploadTask.TaskSnapshot, Task<Uri>>() {
                 @Override
-                public void onSuccess(UploadTask.TaskSnapshot taskSnapshot) {
-                    String url = taskSnapshot.getMetadata().getReference().getDownloadUrl().toString();
-                    deal.setImageUrl(url);
-                    showImage(url);
+                public Task<Uri> then(@NonNull Task<UploadTask.TaskSnapshot> task) throws Exception {
+                    if (!task.isSuccessful()) {
+                        throw task.getException();
+                    }
+                    return reference.getDownloadUrl();
+                }
+            }).addOnCompleteListener(new OnCompleteListener<Uri>() {
+                @Override
+                public void onComplete(@NonNull Task<Uri> task) {
+                    if (task.isSuccessful()) {
+                        Uri downloadUri = task.getResult();
+                        assert downloadUri != null;
+                        String imageUrl = downloadUri.toString();
+                        String imageName = task.getResult().getLastPathSegment();
+                        Log.d("imageUrl", "onSuccess: "+downloadUri.toString());
+                        deal.setImageUrl(imageUrl);
+                        deal.setImageName(imageName);
+                        showImage(imageUrl);
+                    } else {
+                        Toast.makeText(Insert.this, "Picture couldn't be uploaded", Toast.LENGTH_LONG).show();
+                    }
                 }
             });
 
         }
     }
+    public void editImage(View view) {
+        Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+        intent.setType("image/jpeg");
+        intent.putExtra(Intent.EXTRA_LOCAL_ONLY,true);
+        startActivityForResult(Intent.createChooser(intent, "Insert Picture"), PICTURE_RESULT);
+    }
 
-    private void showImage(String url){
-        if (url != null && url.isEmpty() == false){
-            int width= Resources.getSystem().getDisplayMetrics().widthPixels;
+    private void showImage(String url) {
+        if (url != null && url.isEmpty() == false) {
+            int width = Resources.getSystem().getDisplayMetrics().widthPixels;
             Picasso.get()
                     .load(url)
-                    .resize(width, width*2/3)
+                    .resize(width, width * 2 / 3)
                     .centerCrop()
                     .into(imageView);
         }

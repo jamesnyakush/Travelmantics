@@ -30,7 +30,7 @@ public class TravelDeals extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_travel_deals);
         fab = findViewById(R.id.addDeal);
-        if (FirebaseUtil.isAdmin == true){
+//        if (FirebaseUtil.isAdmin == true){
             fab.setVisibility(View.VISIBLE);
             fab.setOnClickListener(new View.OnClickListener() {
                 @Override
@@ -39,7 +39,7 @@ public class TravelDeals extends AppCompatActivity {
                 }
             });
 
-        }
+//        }
         
 
 
